@@ -1,0 +1,9 @@
+{
+  "name": "deviner",
+  "description": "Infers complete intent from rough, incomplete ideas using multi-perspective AI agents. Transforms sloppy executive-level prompts into fully specified, actionable specifications.",
+  "version": "1.0.0",
+  "author": {
+    "name": "matvei77"
+  },
+  "keywords": ["inference", "intent", "prompt", "specification", "divine", "ideation"]
+}

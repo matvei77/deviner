@@ -1,0 +1,13 @@
+{
+  "name": "deviner-marketplace",
+  "owner": {
+    "name": "matvei77"
+  },
+  "plugins": [
+    {
+      "name": "deviner",
+      "source": "./plugins/deviner",
+      "description": "Infers complete intent from rough, incomplete ideas using multi-perspective AI agents. Transforms sloppy executive-level prompts into fully specified, actionable specifications."
+    }
+  ]
+}
