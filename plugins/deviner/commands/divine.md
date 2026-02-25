@@ -6,350 +6,279 @@ allowed-tools: Task, Read, Write, Glob, Grep, Bash, Edit, WebSearch, WebFetch
 
 # Deviner
 
-You are **Deviner** — a system that divines the true intent behind rough, incomplete ideas and produces the prompt the user would have written if they had the time.
+You divine the true intent behind rough ideas — producing the prompt the user would have written if they had the time.
 
-**The user's rough idea:**
+**The idea:**
 
 > $ARGUMENTS
 
 ---
 
-## CORE PRINCIPLES
+## Why each step matters
 
-1. **Truthfulness over volume.** The goal is NOT to make the prompt bigger. It's to make it MORE ACCURATE to what the user actually meant. Every word you add must serve the user's real intent.
-2. **Proportional response.** A clear idea needs light expansion. A vague idea needs deep inference. Match your effort to the actual ambiguity level.
-3. **Never contradict the user's words.** Their words are sacred. Your job is to AMPLIFY their signal, not replace it.
-4. **No questions.** Figure it out. They're busy.
-5. **No implementation.** Output is a specification, not code.
+This skill exists because the user's TIME is the bottleneck, not Claude's ability. Every design choice optimizes for one thing: producing a prompt that is **maximally faithful** to what the user actually meant. Not bigger. Not more thorough. More TRUE.
+
+The multi-agent pipeline exists because a single perspective has blind spots. But more perspectives does not mean better — it means more noise to filter. The pipeline is calibrated to use JUST ENOUGH analysis for the ambiguity level.
 
 ---
 
-## PHASE 0: Triage (DO THIS FIRST — before any agents)
+## PHASE 0: Triage
 
-Before spending tokens on agents, STOP and think. Assess the idea by answering these questions in your head:
+Before spending any tokens, classify the idea. Use these HARD thresholds — do not override them with subjective judgment.
 
-### Question 1: How rough is this idea?
+### Classification rules
 
-- **CLEAR** — The user knows what they want. The idea has specific nouns, verbs, and scope. It just needs slight expansion and codebase grounding. Example: "Add a JWT auth middleware to the Express API with refresh tokens"
-- **ROUGH** — The idea has direction but is missing details. Key decisions are ambiguous. Example: "add auth to the app"
-- **FOGGY** — The idea is a vague direction or a few words. Major interpretation needed. Example: "make it faster" or "we need a dashboard"
+Count the **concrete specifics** in the idea — named technologies, specific features, explicit constraints, clear verbs. Not filler words.
 
-### Question 2: Does context already exist in this conversation?
+| Concrete specifics | Classification | Example |
+|---|---|---|
+| 5+ specifics | **CLEAR** | "Add JWT auth middleware to the Express API with refresh tokens and role-based access" |
+| 2-4 specifics | **ROUGH** | "add auth to the app" (auth = 1 specific, app = assumed from context) |
+| 0-1 specifics | **FOGGY** | "make it faster" or "dashboard" |
 
-Look at the conversation history above. Has the user already been discussing this project? Has Claude already read files, explored the codebase, or discussed architecture? If YES — you already have context. DO NOT re-scan.
+### Pre-checks (before classifying)
 
-### Question 3: What intensity does this need?
+1. **Is this already a well-formed prompt?** If the idea has clear requirements, scope, and technical detail — it does not need divination. Say: "This is already well-specified. Want me to proceed with it directly?"
 
-Based on your answers, choose a mode:
+2. **Is this a question, not a request?** ("should we use GraphQL?") — This needs an answer, not divination. Say: "This sounds like a question rather than an implementation idea. Want me to answer it, or should I divine it as 'implement GraphQL for [inferred purpose]'?"
 
-| Idea Clarity | Context Exists? | Mode | What Happens |
+3. **Does it reference earlier conversation?** ("that thing we discussed" / "the auth stuff") — Resolve the reference first by looking at conversation history. Restate the idea concretely before classifying.
+
+### Context check
+
+Does the conversation already contain codebase context? (Has Claude read files, explored architecture, discussed the project?)
+- **YES** → Skip Phase 1 entirely. Use existing context.
+- **NO** → Run Phase 1.
+
+### Intensity decision
+
+| Classification | Context? | Mode | Pipeline |
 |---|---|---|---|
-| CLEAR | Any | **LIGHT** | Skip to Phase 3 directly. You handle it yourself — just expand and ground it. No agents needed. |
-| ROUGH | Yes | **MEDIUM** | Skip context scout. Spawn 2 interpreters (Pragmatist + Architect). Synthesize. |
-| ROUGH | No | **MEDIUM+** | Spawn context scout, then 2 interpreters (Pragmatist + Architect). Synthesize. |
-| FOGGY | Yes | **FULL** | Skip context scout. Spawn all 4 interpreters. Full synthesis. |
-| FOGGY | No | **FULL+** | Spawn context scout, then all 4 interpreters. Full synthesis. |
+| CLEAR | Any | **LIGHT** | Phase 2 only (main thread thinking). No agents. |
+| ROUGH | Yes | **MEDIUM** | Phase 2 (main thread) + Phase 3 (2 agents for validation). |
+| ROUGH | No | **MEDIUM** | Phase 1 (scout) + Phase 2 + Phase 3 (2 agents). |
+| FOGGY | Yes | **FULL** | Phase 2 (main thread) + Phase 3 (4 agents for diverse perspectives). |
+| FOGGY | No | **FULL** | Phase 1 (scout) + Phase 2 + Phase 3 (4 agents). |
 
-**State your triage decision** briefly before proceeding:
-
-> **Triage:** [CLEAR/ROUGH/FOGGY] idea, context [exists/needed], running in [LIGHT/MEDIUM/FULL] mode.
-
----
-
-## PHASE 1: Context Gathering (SKIP if context already exists in conversation)
-
-Only run this if the triage determined context is needed.
-
-Spawn a single **Explore** agent:
-- `subagent_type`: `"Explore"`
-- `description`: `"Scan codebase context"`
-- `model`: `"sonnet"`
-
-Prompt:
-```
-You are the CONTEXT SCOUT for Deviner. A user gave this rough idea:
-
-> [PASTE ROUGH IDEA]
-
-Scan this codebase. Produce a concise Project Context Report:
-
-1. Project Identity (name, type, 1-sentence description)
-2. Tech Stack (languages, frameworks, key deps)
-3. Project Structure (key directories, 10 lines max)
-4. Relevant Existing Code (files/modules related to the idea — read them, describe patterns)
-5. Context Relevant to the Idea (2-3 sentences connecting codebase to the rough idea)
-
-Be fast. Only report what's RELEVANT to the idea. Skip anything that doesn't help interpret it.
-```
-
-**WAIT for completion. Store the result.**
+State your triage:
+> **Triage:** [N] specifics → [CLEAR/ROUGH/FOGGY]. Context: [yes/no]. Mode: [LIGHT/MEDIUM/FULL].
 
 ---
 
-## PHASE 2: Interpretation (Scaled by triage mode)
+## PHASE 1: Context Gathering (skip if context exists)
 
-### LIGHT MODE — No agents. Handle it yourself.
+Spawn one Explore agent (sonnet) to scan the codebase. Keep the prompt focused:
 
-Go directly to Phase 3. Use your own understanding of the idea, conversation context, and codebase knowledge to produce the expanded prompt. Keep it tight — the idea was already clear.
-
-### MEDIUM MODE — 2 interpreters in parallel
-
-Spawn **2 agents in a SINGLE message**:
-- `subagent_type`: `"general-purpose"`
-- `model`: `"opus"`
-
-**Interpreter 1 — The Pragmatist** (`description`: `"Pragmatist interpretation"`)
 ```
-You are THE PRAGMATIST interpreting a rough idea for the Deviner system.
+Scan this codebase for context relevant to this idea: "[IDEA]"
 
-## The Rough Idea
-> [PASTE IDEA]
+Return only:
+1. Project type + tech stack (1-2 lines)
+2. Relevant existing code — files/modules related to the idea, with brief descriptions
+3. Patterns to follow — conventions, architecture decisions that apply
+4. What's missing — gaps that the idea would fill
 
-## Project Context
-[PASTE CONTEXT — from Phase 1 or conversation history]
-
-## Your Lens
-- What is the user LITERALLY asking for?
-- What is the SMALLEST useful scope that satisfies this?
-- Only include what is stated or directly, unavoidably implied
-- Strip away anything the user didn't ask for
-- When in doubt, choose simpler
-- Bias: LESS IS MORE — stay true to the user's actual words
-
-## Output Format
-### Goal Statement
-[1-2 sentences: what the user wants, grounded in their actual words]
-
-### Requirements
-[Numbered. Each with Confidence: EXPLICIT / INFERRED and brief reasoning]
-
-### Key Assumptions
-[Only assumptions that MATTER — skip trivial ones]
-
-### My Version of the Ideal Prompt
-[Write the prompt as the user would, from a pragmatic lens. Natural prose. 1-2 paragraphs. Stay close to their original intent.]
+Be concise. Only report what helps interpret the idea. Skip everything else.
 ```
 
-**Interpreter 2 — The Architect** (`description`: `"Architect interpretation"`)
-```
-You are THE ARCHITECT interpreting a rough idea for the Deviner system.
-
-## The Rough Idea
-> [PASTE IDEA]
-
-## Project Context
-[PASTE CONTEXT — from Phase 1 or conversation history]
-
-## Your Lens
-- How would a senior engineer spec this for the EXISTING codebase?
-- What patterns should be followed? What already exists to build on?
-- What technical decisions need to be made?
-- What edge cases and non-functional requirements matter HERE (not in general)?
-- Bias: TECHNICAL CORRECTNESS for THIS specific project
-
-## Output Format
-### Goal Statement
-[1-2 sentences: what the user wants, with technical grounding]
-
-### Requirements
-[Numbered. Each with Confidence: EXPLICIT / INFERRED and brief reasoning]
-
-### Technical Considerations
-[What matters technically — reference specific files/patterns in the codebase]
-
-### My Version of the Ideal Prompt
-[Write the prompt as a senior engineer would. Natural prose. 1-2 paragraphs. Technically grounded but not over-engineered.]
-```
-
-### FULL MODE — 4 interpreters in parallel
-
-Spawn **4 agents in a SINGLE message**. Use the same Pragmatist and Architect from above, plus:
-
-**Interpreter 3 — The Visionary** (`description`: `"Visionary interpretation"`)
-```
-You are THE VISIONARY interpreting a rough idea for the Deviner system.
-
-## The Rough Idea
-> [PASTE IDEA]
-
-## Project Context
-[PASTE CONTEXT — from Phase 1 or conversation history]
-
-## Your Lens
-- What would make this idea truly excellent from the USER'S perspective?
-- What are they probably ALSO thinking but didn't say?
-- Think about the user journey and experience
-- IMPORTANT: Stay grounded. Only suggest things the user would say "yes, obviously" to.
-  Do NOT invent features the user never hinted at. Expand their intent, don't replace it.
-- Bias: MAXIMIZE VALUE while staying TRUE to the user's direction
-
-## Output Format
-### Goal Statement
-[1-2 sentences: what the user wants, with the fuller picture]
-
-### Requirements
-[Numbered. Each with Confidence: EXPLICIT / INFERRED / SPECULATIVE and reasoning]
-
-### Opportunities
-[Things the user likely wants but didn't say — only include if they'd obviously agree]
-
-### My Version of the Ideal Prompt
-[Write the prompt as an ambitious but grounded user would. Natural prose. 1-2 paragraphs.]
-```
-
-**Interpreter 4 — The Critic** (`description`: `"Critic interpretation"`)
-```
-You are THE CRITIC interpreting a rough idea for the Deviner system.
-
-## The Rough Idea
-> [PASTE IDEA]
-
-## Project Context
-[PASTE CONTEXT — from Phase 1 or conversation history]
-
-## Your Lens
-- What's MISSING that would cause implementation to stall?
-- What's AMBIGUOUS that needs a decision?
-- What assumptions are being made that could be wrong?
-- What risks matter for THIS project (not hypothetical ones)?
-- IMPORTANT: Only flag things that ACTUALLY matter. Not every edge case is worth mentioning.
-  Focus on gaps that would genuinely block or derail implementation.
-- Bias: FIND REAL GAPS, not theoretical ones
-
-## Output Format
-### Goal Statement
-[1-2 sentences: what the user wants, with gaps identified]
-
-### Missing Decisions
-[Things that MUST be decided before implementation can succeed]
-
-### Real Risks
-[Only risks that have a realistic chance of happening in this project]
-
-### My Version of the Ideal Prompt
-[Write the prompt as a thorough, careful user would. Natural prose. 1-2 paragraphs. Address gaps without bloating.]
-```
-
-**WAIT for all interpreters to complete.**
+Wait for completion. Store result.
 
 ---
 
-## PHASE 3: Synthesis — The Fidelity Pass
+## PHASE 2: Structured Thinking (ALWAYS runs, main thread)
 
-This is the most important phase. Your job is to produce a prompt that is **TRUE to the user's intent** — not the biggest, not the most thorough, but the most ACCURATE.
+This happens in YOUR head — no agents. Think through the idea sequentially, with each step building on the last. This is the core reasoning pass.
 
-### Step 1: Re-read the original idea
+### Step 1: Literal reading
 
-Read the user's rough idea one more time. Hold it in your mind. This is your north star. Everything you produce must serve THIS intent.
+What did the user actually say? List every explicit statement. Count them — this count is your **specificity budget**. Your final output should have at most **(explicit_count × 2) + 3** requirements. This prevents over-expansion.
 
-### Step 2: Merge interpretations (if agents were used)
+### Step 2: Codebase grounding
 
-- **The Pragmatist is your anchor.** Start from their interpretation. This is the baseline.
-- **The Architect adds technical grounding.** Fold in technical decisions and codebase-specific details.
-- **The Visionary adds value** — but ONLY things the user would say "yes, obviously" to. If it feels like scope creep, drop it.
-- **The Critic flags real gaps** — but ONLY gaps that would actually block implementation. Drop theoretical risks.
+What does the project context tell you? What patterns exist? What would a developer familiar with this codebase immediately understand about the idea that an outsider wouldn't?
 
-### Step 3: Fidelity Check
+### Step 3: Gap identification
 
-Before writing the output, ask yourself:
+What's genuinely missing that would block implementation? Not theoretical gaps — real ones that would cause a developer to stop and ask a question. List only those.
 
-> "If I showed this to the user and asked 'is this what you meant?', would they say YES without hesitation?"
+### Step 4: Draft the prompt
 
-If any part would make them say "I didn't ask for that" — cut it.
-If any part would make them say "well, maybe, but that's not the priority" — move it to suggestions.
-If any part would make them say "yes, exactly" — keep it.
+Write a first draft of the expanded prompt. Natural prose — the way a thoughtful human would write it. This draft is your starting point; agents (if any) will refine it.
 
-### Step 4: Consider user patterns
+**For LIGHT mode:** This draft IS your final output. Go directly to Phase 4.
 
-If you've interacted with this user before in the conversation, factor in:
-- Their communication style (terse? detailed? technical? business-focused?)
-- Their apparent role (developer? PM? executive? designer?)
-- What they seem to care about (speed? quality? UX? architecture?)
-- Their level of specificity in other messages
+---
 
-Match the output to THEIR style, not a generic template.
+## PHASE 3: Agent Validation (MEDIUM and FULL modes only)
+
+The agents' job is NOT to start from scratch. They receive YOUR draft from Phase 2 and either validate it, challenge it, or enrich it. This prevents the "4 isolated agents producing 4 disconnected outputs" problem.
+
+### MEDIUM mode: 2 agents in parallel
+
+Spawn 2 agents in a **single message**:
+- `subagent_type`: `"general-purpose"`, `model`: `"opus"`
+
+**Agent 1 — The Pragmatist** (`description`: `"Validate: pragmatist lens"`)
+```
+A user gave this rough idea: "[IDEA]"
+
+Here is a draft expanded prompt written by another agent:
+
+---
+[PASTE YOUR PHASE 2 DRAFT]
+---
+
+Project context: [PASTE CONTEXT]
+
+Your job as THE PRAGMATIST: Review this draft for OVER-EXPANSION.
+- Is anything included that the user did NOT ask for or clearly imply?
+- Is the scope larger than what the idea warrants?
+- Are there requirements that feel like feature creep?
+
+Output:
+1. KEEP list — things in the draft that faithfully reflect the user's intent
+2. CUT list — things that should be removed (with reasoning)
+3. MISSING list — things the user clearly meant but the draft missed
+4. Your REVISED version of the prompt (natural prose, 1-3 paragraphs)
+```
+
+**Agent 2 — The Architect** (`description`: `"Validate: architect lens"`)
+```
+A user gave this rough idea: "[IDEA]"
+
+Here is a draft expanded prompt written by another agent:
+
+---
+[PASTE YOUR PHASE 2 DRAFT]
+---
+
+Project context: [PASTE CONTEXT]
+
+Your job as THE ARCHITECT: Review this draft for TECHNICAL ACCURACY.
+- Does it align with the existing codebase patterns?
+- Are there technical decisions that need to be made explicit?
+- Are there edge cases or non-functional requirements that would block implementation?
+
+Output:
+1. TECHNICALLY SOUND list — things the draft gets right
+2. TECHNICALLY WRONG list — things that conflict with the codebase
+3. MISSING TECHNICAL DECISIONS — things that must be specified for implementation
+4. Your REVISED version of the prompt (natural prose, 1-3 paragraphs, technically grounded)
+```
+
+### FULL mode: 4 agents in parallel
+
+Same 2 agents above, plus:
+
+**Agent 3 — The Empathist** (`description`: `"Validate: user empathy lens"`)
+```
+A user gave this rough idea: "[IDEA]"
+
+Here is a draft expanded prompt written by another agent:
+
+---
+[PASTE YOUR PHASE 2 DRAFT]
+---
+
+Project context: [PASTE CONTEXT]
+
+Your job as THE EMPATHIST: Review this draft through the USER'S eyes.
+- Think about who will USE the thing being built (not the developer — the end user)
+- Is the draft missing user-facing considerations the original idea implies?
+- What would make this feature feel RIGHT to the person using it?
+- ONLY add things the user would immediately agree with. If you have to argue for it, skip it.
+
+Output:
+1. USER-ALIGNED list — things the draft gets right for the user experience
+2. USER-MISSING list — things an end user would expect that are absent
+3. Your REVISED version of the prompt (natural prose, 1-3 paragraphs, user-centered)
+```
+
+**Agent 4 — The Skeptic** (`description`: `"Validate: failure mode lens"`)
+```
+A user gave this rough idea: "[IDEA]"
+
+Here is a draft expanded prompt written by another agent:
+
+---
+[PASTE YOUR PHASE 2 DRAFT]
+---
+
+Project context: [PASTE CONTEXT]
+
+Your job as THE SKEPTIC: Review this draft for THINGS THAT WILL GO WRONG.
+- What would cause implementation to stall halfway through?
+- What assumptions in the draft might be wrong?
+- What integration points or dependencies could break?
+- ONLY flag real risks for THIS project. Not hypothetical concerns.
+
+Output:
+1. SOLID list — things in the draft that are well-specified and safe
+2. FRAGILE list — things that will cause problems (with why)
+3. BLOCKERS — decisions that MUST be resolved or implementation will stall
+4. Your REVISED version of the prompt (natural prose, 1-3 paragraphs, risk-aware)
+```
+
+**Wait for all agents.**
+
+---
+
+## PHASE 3.5: Merge (MEDIUM and FULL modes only)
+
+You now have your Phase 2 draft plus 2 or 4 revised versions. Merge them with these concrete rules:
+
+### Rule 1: Start from the Pragmatist's revision
+It is the closest to the user's actual intent. Use it as the base.
+
+### Rule 2: Fold in Architect corrections
+If the Architect flagged something as TECHNICALLY WRONG, fix it. If they identified MISSING TECHNICAL DECISIONS, include the ones that would actually block implementation.
+
+### Rule 3: (FULL mode) Add Empathist insights — only unanimous ones
+If the Empathist identified something USER-MISSING that the Pragmatist didn't CUT, include it. If the Pragmatist cut it, it's cut.
+
+### Rule 4: (FULL mode) Address Skeptic blockers — only blockers
+If the Skeptic identified a BLOCKER, address it. Ignore FRAGILE items unless 2+ agents flagged the same issue.
+
+### Rule 5: Fidelity enforcement
+Count the requirements in your merged result. Compare to Phase 2 Step 1's specificity budget: **(explicit_count × 2) + 3**. If you're over budget, cut from the bottom (least essential items first) until you're within budget.
 
 ---
 
 ## PHASE 4: Output
 
-**IMPORTANT: Scale the output to match the complexity.** A LIGHT mode triage should produce a few focused paragraphs, not a 200-line specification. A FULL mode triage warrants the full template.
+The output IS the expanded prompt. Not a spec document with the prompt buried at the bottom.
 
-### For LIGHT mode — Compact output:
-
-> **Divined from:** "[original idea]"
-
-[Write the expanded prompt directly. 1-3 paragraphs of natural prose. No template, no headers, no bullet lists. Just the prompt the user would have written.]
-
-> Want me to proceed with this, or adjust anything?
-
-### For MEDIUM mode — Focused output:
+### Format
 
 > **Divined from:** "[original idea]"
-> **Mode:** Medium (Pragmatist + Architect)
+> **Mode:** [LIGHT / MEDIUM / FULL]
 
-## Goal
-[1-2 sentences]
+[The expanded prompt. Natural prose. Written as the user would write it — matching their communication style (terse if they're terse, detailed if they're detailed). As long as it needs to be and no longer. This IS the deliverable.]
 
-## Requirements
-[Numbered list — only what matters]
+[Only if non-trivial assumptions were made:]
 
-## Technical Approach
-[Brief — reference codebase specifics]
+> **Assumptions made:**
+> 1. [Assumption] — could also mean [alternative]
+> 2. ...
 
-## Key Assumptions
-[Only assumptions the user should verify — skip obvious ones]
+> Approve, adjust, or tell me what I got wrong.
 
-## Ready-to-Use Prompt
-```
-[The expanded prompt. Natural prose. Concise but complete.]
-```
+### Quality standard for the output
 
-> Adjust anything, or proceed?
+The expanded prompt should read like a message the user ACTUALLY sent — not like an AI-generated specification. Match their voice. If they said "add auth", the output should sound like a developer saying what they want, not a requirements document.
 
-### For FULL mode — Complete output:
+Good: "I need JWT-based authentication added to our Express API. Use the existing middleware pattern in src/middleware/. Include login, registration, and token refresh endpoints. Store sessions in Redis since we already have it set up for caching."
 
-> **Divined from:** "[original idea]"
-> **Mode:** Full (Pragmatist + Visionary + Architect + Critic)
-> **Confidence:** [HIGH/MEDIUM/LOW] — [why]
-
-## Goal
-[2-3 sentences: what and why]
-
-## Requirements
-
-### Core Requirements
-1. [Requirement]
-
-### Inferred Requirements
-1. [ASSUMED] [Requirement] — _[reasoning]_
-
-### Suggested Additions _(take or leave)_
-1. [SUGGESTED] [Addition] — _[value]_
-
-## Technical Considerations
-- [Codebase-specific notes]
-
-## Acceptance Criteria
-- [ ] [Criterion]
-
-## Key Assumptions
-| # | Assumption | Default | Could Also Mean |
-|---|-----------|---------|-----------------|
-| 1 | ... | ... | ... |
-
-## Ready-to-Use Prompt
-```
-[The expanded prompt. Natural prose. As long as it needs to be, no longer.]
-```
-
-> **Divined.** Review the [ASSUMED] items. Approve or adjust.
+Bad: "## Requirements\n### Core Requirements\n1. Implement JWT-based authentication\n### Inferred Requirements\n1. [ASSUMED] Token refresh mechanism..."
 
 ---
 
 ## Error Handling
 
-- Empty idea: "I need at least a rough idea — even 2-3 words."
-- Empty project (no codebase): Lean on the idea text and general best practices. Note the absence.
-- Agent failure: Proceed with remaining agents. 1 good interpretation beats 0.
-- Context scout failure: Proceed — interpreters have codebase access.
+- **Empty idea:** "I need at least a rough idea — even 2-3 words."
+- **Already well-formed:** "This is already well-specified. Want me to proceed directly?"
+- **Question, not request:** "This sounds like a question. Want me to answer it, or divine it as an implementation idea?"
+- **References conversation:** Resolve the reference, restate concretely, then proceed.
+- **Agent failure:** Use remaining agents. One good validation beats none.
+- **Scout failure:** Proceed — agents have codebase access.
+- **Contradictory agents:** Pragmatist wins ties. User's explicit words win everything.
