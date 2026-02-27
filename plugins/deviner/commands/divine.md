@@ -242,6 +242,12 @@ If the Skeptic identified a BLOCKER, address it. Ignore FRAGILE items unless 2+ 
 ### Rule 5: Fidelity enforcement
 Count the requirements in your merged result. Compare to Phase 2 Step 1's specificity budget: **(explicit_count × 2) + 3**. If you're over budget, cut from the bottom (least essential items first) until you're within budget.
 
+### Rule 6: When in doubt, leave it out
+Bias toward omission. A false negative (missing something the user wanted) is correctable with one sentence from the user. A false positive (adding something the user didn't want) erodes trust and makes them wonder what else you got wrong. If you're debating whether to include something, that debate is your answer: leave it out.
+
+### Rule 7: Surface contradictions, don't resolve them
+When 2+ agents directly contradict each other on a requirement (genuine mutual exclusions, not minor wording differences), do NOT silently pick a winner. Instead, surface the disagreement as an inline alternative in the output prose. Use the Pragmatist's position as the default and present the alternative parenthetically — e.g., "Use Redis for session storage (alternatively: JWT stateless tokens if you want to avoid the Redis dependency)." Only for true either/or conflicts.
+
 ---
 
 ## PHASE 4: Output
@@ -257,19 +263,54 @@ The output IS the expanded prompt. Not a spec document with the prompt buried at
 
 [Only if non-trivial assumptions were made:]
 
-> **Assumptions made:**
-> 1. [Assumption] — could also mean [alternative]
+> **High-risk assumptions** (would change implementation direction):
+> 1. [Assumption] — alternative: [what else it could mean]
 > 2. ...
+>
+> **Safe defaults** (follow codebase conventions):
+> - [Convention-based decision]
+> - ...
+
+*How to classify: if choosing the alternative would change the implementation approach, it's high-risk. If it just follows what the codebase already does, it's a safe default.*
 
 > Approve, adjust, or tell me what I got wrong.
 
-### Quality standard for the output
+### Quality standards for the output
 
-The expanded prompt should read like a message the user ACTUALLY sent — not like an AI-generated specification. Match their voice. If they said "add auth", the output should sound like a developer saying what they want, not a requirements document.
+Two hard rules:
+
+**1. Match their register.** Use the user's own terms as the backbone of the output. If they said "add auth", the output says "authentication" not "identity management framework." Their vocabulary IS the spec language. The expanded prompt should read like a message they actually sent, not an AI-generated specification.
+
+**2. Match their density.** Terse input gets compact output. A 3-word idea should not produce a 500-word spec. The expansion ratio should reflect ambiguity genuinely resolved, not words generated. If the user wrote 5 words and you need 200 to capture what they meant, fine — but those 200 words should each earn their place.
 
 Good: "I need JWT-based authentication added to our Express API. Use the existing middleware pattern in src/middleware/. Include login, registration, and token refresh endpoints. Store sessions in Redis since we already have it set up for caching."
 
 Bad: "## Requirements\n### Core Requirements\n1. Implement JWT-based authentication\n### Inferred Requirements\n1. [ASSUMED] Token refresh mechanism..."
+
+---
+
+## PHASE 5: Refinement Loop (within-session only)
+
+When the user responds to a divined prompt with adjustments, feedback, or corrections:
+
+### Step 1: Diff their feedback
+Silence is approval — anything not mentioned is accepted. Only explicitly mentioned items are contested. Treat every adjustment word the user provides as an EXPLICIT signal (these override all agent consensus).
+
+### Step 2: Re-run contested sections
+Pass only the contested portions back through the same pipeline mode (LIGHT/MEDIUM/FULL) that was used originally. Do not re-run the entire pipeline — only the parts that changed.
+
+### Step 3: Reassemble
+Merge the re-processed sections with the approved (unchanged) portions into a coherent prompt.
+
+### Step 4: Re-present
+Output the refined prompt with a `(refined)` tag in the header:
+
+> **Divined from:** "[original idea]" (refined)
+> **Mode:** [LIGHT / MEDIUM / FULL]
+
+### Constraints
+- Maximum **3 refinement rounds** per session. After round 3, present the result as final and suggest the user edit directly.
+- Refinement is within-session only — a new conversation starts fresh.
 
 ---
 
@@ -281,4 +322,4 @@ Bad: "## Requirements\n### Core Requirements\n1. Implement JWT-based authenticat
 - **References conversation:** Resolve the reference, restate concretely, then proceed.
 - **Agent failure:** Use remaining agents. One good validation beats none.
 - **Scout failure:** Proceed — agents have codebase access.
-- **Contradictory agents:** Pragmatist wins ties. User's explicit words win everything.
+- **Contradictory agents:** Surface per Rule 7. Pragmatist is the default position; alternative is parenthetical. User's explicit words win everything.

@@ -18,7 +18,7 @@ You have detected that the user's input appears to be a rough, incomplete idea t
 
 **Do NOT start implementing directly.** Instead, suggest using the `/divine` command:
 
-> It looks like this idea could benefit from deeper interpretation. I can run it through **Deviner** — a multi-agent system that will analyze your idea from 4 perspectives (Pragmatist, Visionary, Architect, Critic) and produce a fully specified prompt you can review and approve.
+> It looks like this idea could benefit from deeper interpretation. I can run it through **Deviner** — a multi-agent system that will analyze your idea from 4 perspectives (Pragmatist, Architect, Empathist, Skeptic) and produce a fully specified prompt you can review and approve.
 >
 > Would you like me to run `/divine` on this idea, or would you prefer to proceed directly?
 

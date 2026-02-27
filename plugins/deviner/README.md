@@ -23,9 +23,9 @@ Your rough idea (e.g., "add auth")
          v
   [4 Interpreters]         <- Run IN PARALLEL with different lenses:
   |  Pragmatist  |         <- Minimum viable reading
-  |  Visionary   |         <- Maximum value reading
   |  Architect   |         <- Technical depth reading
-  |  Critic      |         <- Gap/risk finding
+  |  Empathist   |         <- User empathy reading
+  |  Skeptic     |         <- Failure mode finding
          |
          v
   [Synthesis]              <- Main instance merges best parts from all 4
