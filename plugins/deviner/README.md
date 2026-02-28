@@ -1,6 +1,7 @@
 # Deviner
 
-*To divine: to discover something by intuition or supernatural insight.*
+*"He reveals deep and hidden things; he knows what lies in darkness, and light dwells with him."*
+*— Daniel 2:22*
 
 A multi-agent Claude Code plugin that transforms rough, incomplete ideas into fully specified, actionable prompts.
 
@@ -80,7 +81,8 @@ claude plugin install github:matvei77/deviner
 
 | Command | Description |
 |---------|-------------|
-| `/divine <idea>` | Run the full divine inference pipeline on your rough idea |
+| `/divine <idea>` | Full multi-agent pipeline — triage, scout, parallel agents, merge |
+| `/divine-express <idea>` | Fast single-pass expansion — no agents, main-thread only |
 
 ## Agents
 
